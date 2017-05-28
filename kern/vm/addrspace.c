@@ -109,9 +109,16 @@ as_activate(void)
                 return;
         }
 
-        /*
-         * Write this.
-         */
+        // copied from dumbvm.c
+        int i, spl;
+        /* Disable interrupts on this CPU while frobbing the TLB. */
+        spl = splhigh();
+
+        for (i=0; i<NUM_TLB; i++) {
+                tlb_write(TLBHI_INVALID(i), TLBLO_INVALID(), i);
+        }
+
+        splx(spl);
 }
 
 void
@@ -122,6 +129,7 @@ as_deactivate(void)
          * anything. See proc.c for an explanation of why it (might)
          * be needed.
          */
+        as_activate();
 }
 
 /*
