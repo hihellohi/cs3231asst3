@@ -47,6 +47,8 @@ struct page_table_entry {
         uint32_t elo;
 };
 
+struct page_table_entry *page_table;
+
 #include <machine/vm.h>
 
 /* Fault-type arguments to vm_fault() */

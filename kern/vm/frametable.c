@@ -16,15 +16,21 @@ static struct spinlock stealmem_lock = SPINLOCK_INITIALIZER;
 
 void frametable_bootstrap(void) {
         paddr_t top_of_ram = ram_getsize();
-        paddr_t location = top_of_ram - (top_of_ram / PAGE_SIZE * sizeof(struct frame_table_entry));
+        size_t nframes =  top_of_ram / PAGE_SIZE;
+        paddr_t location = top_of_ram - (nframes * sizeof(struct frame_table_entry));
         frame_table = (struct frame_table_entry *) location;
-        size_t table_size = top_of_ram / PAGE_SIZE;
 
-        // mark memory used by frame_table as used
+        location -= nframes * 2 * sizeof(struct page_table_entry);
+        page_table = (struct page_table_entry *) location;
+
+        // mark memory used by frame_table and page_table as used
         // location / PAGE_SIZE should round down to the appropriate page
-        for (size_t i = location / PAGE_SIZE; i < table_size; i++) {
+        for (size_t i = location / PAGE_SIZE; i < nframes; i++) {
                 frame_table[i].used = true;
                 frame_table[i].next_free = NULL;
+        }
+        for (size_t i = 0; i < nframes * 2; i++) {
+                page_table[i].pid = 0;
         }
 
         // mark memory used so far by kernel as used
