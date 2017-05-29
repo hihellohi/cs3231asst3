@@ -9,8 +9,8 @@
  * You probably also want to write a frametable initialisation
  * function and call it from vm_bootstrap
  */
-struct frame_table_entry *frame_table = NULL;
-struct frame_table_entry *next_free = NULL;
+static struct frame_table_entry *frame_table = NULL;
+static struct frame_table_entry *next_free = NULL;
 
 static struct spinlock stealmem_lock = SPINLOCK_INITIALIZER;
 
@@ -18,27 +18,26 @@ void frametable_bootstrap(void) {
         paddr_t top_of_ram = ram_getsize();
         paddr_t location = top_of_ram - (top_of_ram / PAGE_SIZE * sizeof(struct frame_table_entry));
         frame_table = (struct frame_table_entry *) location;
-        unsigned table_size = top_of_ram / PAGE_SIZE;
+        size_t table_size = top_of_ram / PAGE_SIZE;
 
         // mark memory used by frame_table as used
         // location / PAGE_SIZE should round down to the appropriate page
-        for (unsigned i = location / PAGE_SIZE; i < table_size; i++) {
+        for (size_t i = location / PAGE_SIZE; i < table_size; i++) {
                 frame_table[i].used = true;
                 frame_table[i].next_free = NULL;
         }
 
         // mark memory used so far by kernel as used
         // we need to round up
-        unsigned highest_used = (ram_getfirstfree() + (PAGE_SIZE - 1)) / PAGE_SIZE;
-        for (unsigned i = 0; i < highest_used; i++) {
+        size_t highest_used = (ram_getfirstfree() + PAGE_SIZE - 1) / PAGE_SIZE;
+        for (size_t i = 0; i < highest_used; i++) {
                 frame_table[i].used = true;
                 frame_table[i].next_free = NULL;
         }
         next_free = &(frame_table[highest_used]);
-        frame_table[highest_used - 1].next_free = next_free;
 
         // mark everything else as free memory
-        for (unsigned i = highest_used; i < location / PAGE_SIZE; i++) {
+        for (size_t i = highest_used; i < location / PAGE_SIZE; i++) {
                 frame_table[i].used = false;
                 frame_table[i].next_free = &(frame_table[i + 1]);
         }
@@ -54,9 +53,9 @@ void frametable_bootstrap(void) {
 
 vaddr_t alloc_kpages(unsigned int npages)
 {
-        if (frame_table == NULL) {
-                paddr_t addr;
+        paddr_t addr;
 
+        if (frame_table == NULL) {
                 spinlock_acquire(&stealmem_lock);
                 addr = ram_stealmem(npages);
                 spinlock_release(&stealmem_lock);
@@ -71,14 +70,48 @@ vaddr_t alloc_kpages(unsigned int npages)
                 KASSERT(npages == 1);
 
                 if (npages != 1) {
-                        return (vaddr_t) NULL;
+                        return 0;
                 }
-                return (vaddr_t) NULL;
+
+                spinlock_acquire(&stealmem_lock);
+                if (next_free == NULL) {
+                        addr = 0;
+                }
+                else {
+                        addr = PADDR_TO_KVADDR((next_free - frame_table) * PAGE_SIZE);
+                        next_free->used = true;
+                        next_free = next_free->next_free;
+                }
+                spinlock_release(&stealmem_lock);
+
+                return addr;
         }
 }
 
 void free_kpages(vaddr_t addr)
 {
-        (void) addr;
+        paddr_t paddr = KVADDR_TO_PADDR(addr);
+        if (paddr > ram_getsize()) {
+                return;
+        }
+        unsigned entry = paddr / PAGE_SIZE;
+
+        spinlock_acquire(&stealmem_lock);
+        frame_table[entry].used = false;
+
+        if (&frame_table[entry] < next_free) {
+                frame_table[entry].next_free = next_free;
+                next_free = &frame_table[entry];
+        }
+        else {
+                for (size_t i = entry; i > 0; i--) {
+                        if (frame_table[i].used == false) {
+                                frame_table[entry].next_free = frame_table[i].next_free;
+                                frame_table[i].next_free = &frame_table[entry];
+                                break;
+                        }
+                }
+        }
+        spinlock_release(&stealmem_lock);
 }
 
