@@ -7,7 +7,16 @@
 #include <machine/tlb.h>
 
 /* Place your page table functions here */
+uint32_t hpt_hash(struct addrspace *as, vaddr_t faultaddr);
 
+uint32_t hpt_hash(struct addrspace *as, vaddr_t faultaddr)
+{
+        uint32_t index;
+
+        // calling ram_getsize() okay?
+        index = (((uint32_t )as) ^ (faultaddr >> PAGE_BITS)) % (ram_getsize() * 2);
+        return index;
+}
 
 void vm_bootstrap(void)
 {

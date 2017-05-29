@@ -40,6 +40,13 @@ struct frame_table_entry {
 	struct frame_table_entry *next_free;
 };
 
+struct page_table_entry {
+        uint32_t pid;
+        vaddr_t vaddr;
+        struct page_table_entry *next;
+        uint32_t elo;
+};
+
 #include <machine/vm.h>
 
 /* Fault-type arguments to vm_fault() */
