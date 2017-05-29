@@ -22,10 +22,11 @@ static struct spinlock stealmem_lock = SPINLOCK_INITIALIZER;
 
 vaddr_t alloc_kpages(unsigned int npages)
 {
-        /*
-         * IMPLEMENT ME.  You should replace this code with a proper
-         *                implementation.
-         */
+        // TODO: this is for debugging only - remove later
+        KASSERT(npages == 1);
+        if (npages != 1) {
+                return (vaddr_t) NULL;
+        }
 
         paddr_t addr;
 
