@@ -35,7 +35,10 @@
  *
  * You'll probably want to add stuff here.
  */
-
+struct frame_table_entry {
+	bool used;
+	struct frame_table_entry *next_free;
+};
 
 #include <machine/vm.h>
 
@@ -47,6 +50,7 @@
 
 /* Initialization function */
 void vm_bootstrap(void);
+void frametable_bootstrap(void);
 
 /* Fault handling function called by trap code */
 int vm_fault(int faulttype, vaddr_t faultaddress);
