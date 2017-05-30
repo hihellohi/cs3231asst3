@@ -67,19 +67,27 @@ vm_fault(int faulttype, vaddr_t faultaddress)
         }
 
         uint32_t hash = hpt_hash(as, faultaddress);
-        if (page_table[hash].pid == 0) {
+        struct page_table_entry *entry = page_table[hash];
+        bool found = false;
+        while (entry != NULL) {
+                if (entry->vaddr == faultaddress) {
+                        /* Disable interrupts on this CPU while frobbing the TLB. */
+                        spl = splhigh();
 
+                        ehi = faultaddress;
+                        elo = page_table[hash]->elo;
+                        tlb_random(ehi, elo);
+
+                        splx(spl);
+                        found = true;
+                }
+                entry = entry->next;
+        }
+        if (found == true) {
+                return 0;
         }
         else {
-                /* Disable interrupts on this CPU while frobbing the TLB. */
-                spl = splhigh();
-
-                ehi = faultaddress;
-                elo = page_table[hash].elo;
-                tlb_random(ehi, elo);
-
-                splx(spl);
-                return 0;
+                // insert into page table
         }
 
         return EFAULT;

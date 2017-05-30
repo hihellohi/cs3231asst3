@@ -20,8 +20,8 @@ void frametable_bootstrap(void) {
         paddr_t location = top_of_ram - (nframes * sizeof(struct frame_table_entry));
         frame_table = (struct frame_table_entry *) location;
 
-        location -= nframes * 2 * sizeof(struct page_table_entry);
-        page_table = (struct page_table_entry *) location;
+        location -= nframes * 2 * sizeof(struct page_table_entry *);
+        page_table = (struct page_table_entry **) location;
 
         // mark memory used by frame_table and page_table as used
         // location / PAGE_SIZE should round down to the appropriate page
@@ -30,7 +30,7 @@ void frametable_bootstrap(void) {
                 frame_table[i].next_free = NULL;
         }
         for (size_t i = 0; i < nframes * 2; i++) {
-                page_table[i].pid = 0;
+                page_table[i] = NULL;
         }
 
         // mark memory used so far by kernel as used
