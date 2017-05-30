@@ -20,8 +20,8 @@ void frametable_bootstrap(void) {
         paddr_t location = top_of_ram - (nframes * sizeof(struct frame_table_entry));
         frame_table = (struct frame_table_entry *) location;
 
-        location -= nframes * 2 * sizeof(struct page_table_entry);
-        page_table = (struct page_table_entry *) location;
+        location -= nframes * 2 * sizeof(struct page_table_entry *);
+        page_table = (struct page_table_entry **) location;
 
         // mark memory used by frame_table and page_table as used
         // location / PAGE_SIZE should round down to the appropriate page
@@ -30,7 +30,7 @@ void frametable_bootstrap(void) {
                 frame_table[i].next_free = NULL;
         }
         for (size_t i = 0; i < nframes * 2; i++) {
-                page_table[i].pid = 0;
+                page_table[i] = NULL;
         }
 
         // mark memory used so far by kernel as used
@@ -105,19 +105,8 @@ void free_kpages(vaddr_t addr)
         spinlock_acquire(&stealmem_lock);
         frame_table[entry].used = false;
 
-        if (&frame_table[entry] < next_free) {
-                frame_table[entry].next_free = next_free;
-                next_free = &frame_table[entry];
-        }
-        else {
-                for (size_t i = entry; i > 0; i--) {
-                        if (frame_table[i].used == false) {
-                                frame_table[entry].next_free = frame_table[i].next_free;
-                                frame_table[i].next_free = &frame_table[entry];
-                                break;
-                        }
-                }
-        }
+        frame_table[entry].next_free = next_free;
+        next_free = &frame_table[entry];
         spinlock_release(&stealmem_lock);
 }
 
