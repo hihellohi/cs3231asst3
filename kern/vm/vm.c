@@ -32,10 +32,6 @@ void vm_bootstrap(void)
 int
 vm_fault(int faulttype, vaddr_t faultaddress)
 {
-        uint32_t ehi, elo;
-        struct addrspace *as;
-        int spl;
-
         faultaddress &= PAGE_FRAME;
 
         switch (faulttype) {
@@ -57,7 +53,7 @@ vm_fault(int faulttype, vaddr_t faultaddress)
                 return EFAULT;
         }
 
-        as = proc_getas();
+        struct addrspace *as = proc_getas();
         if (as == NULL) {
                 /*
                  * No address space set up. This is probably also a
@@ -66,31 +62,46 @@ vm_fault(int faulttype, vaddr_t faultaddress)
                 return EFAULT;
         }
 
+        uint32_t elo;
         uint32_t hash = hpt_hash(as, faultaddress);
         struct page_table_entry *entry = page_table[hash];
+        struct page_table_entry *prev = NULL;
+
         bool found = false;
         while (entry != NULL) {
                 if (entry->vaddr == faultaddress) {
-                        /* Disable interrupts on this CPU while frobbing the TLB. */
-                        spl = splhigh();
-
-                        ehi = faultaddress;
-                        elo = page_table[hash]->elo;
-                        tlb_random(ehi, elo);
-
-                        splx(spl);
+                        elo = entry->elo;
                         found = true;
+                        break;
                 }
+                prev = entry;
                 entry = entry->next;
         }
-        if (found == true) {
-                return 0;
-        }
-        else {
-                // insert into page table
+
+        if (found == false) {
+                struct page_table_entry *new = kmalloc(sizeof(struct page_table_entry));
+                if (prev == NULL) {
+                        page_table[hash] = new;
+                }
+                else {
+                        prev->next = new;
+                }
+                paddr_t paddr = KVADDR_TO_PADDR(alloc_kpages(1));
+                if (paddr == 0) {
+                        return ENOMEM;
+                }
+                new->pid = (uint32_t) as;
+                new->vaddr = faultaddress;
+                new->next = NULL;
+                new->elo = paddr | TLBLO_DIRTY | TLBLO_VALID;
+                elo = new->elo;
         }
 
-        return EFAULT;
+        int spl = splhigh();
+        tlb_random(faultaddress, elo);
+        splx(spl);
+
+        return 0;
 }
 
 /*
