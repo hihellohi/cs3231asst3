@@ -51,8 +51,13 @@ struct vnode;
 typedef struct _as_region * as_region;
 
 struct _as_region {
-        size_t npages;
+        size_t size;
         vaddr_t vbase;
+
+        int readable;
+        int writeable;
+        int executable;
+
         as_region next;
 };
 

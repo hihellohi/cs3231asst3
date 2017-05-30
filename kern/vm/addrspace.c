@@ -58,7 +58,7 @@ as_create(void)
                 return NULL;
         }
 
-		as->first_region = NULL;
+        as->first_region = NULL;
 
         return as;
 }
@@ -73,13 +73,19 @@ as_copy(struct addrspace *old, struct addrspace **ret)
                 return ENOMEM;
         }
 
-		as_region *curold, *curnew;
-		for(curold = &old->first_region, curnew = &newas->first_region; 
+        as_region *curold, *curnew;
+        for(curold = &old->first_region, curnew = &newas->first_region; 
                         *curold;
                         curold = &((*curold)->next), curnew = &((*curnew)->next)){
+
                 *curnew = kmalloc(sizeof(struct _as_region));
+                if(!*curnew){
+                        as_destroy(newas);
+                        return ENOMEM;
+                }
+
                 **curnew = **curold;
-		}
+        }
 
         *ret = newas;
         return 0;
@@ -88,12 +94,12 @@ as_copy(struct addrspace *old, struct addrspace **ret)
 void
 as_destroy(struct addrspace *as)
 {
-		as_region cur = as->first_region, old;
+        as_region cur = as->first_region, old;
         while(cur){
                 old = cur;
                 cur = cur->next;
                 kfree(old);
-		}
+        }
 
         kfree(as);
 }
@@ -149,17 +155,22 @@ int
 as_define_region(struct addrspace *as, vaddr_t vaddr, size_t memsize,
                  int readable, int writeable, int executable)
 {
-        /*
-         * Linked list?
-         */
+        as_region new = kmalloc(sizeof(struct _as_region));
+        if(!new){
+                return ENOMEM;
+        }
 
-        (void)as;
-        (void)vaddr;
-        (void)memsize;
-        (void)readable;
-        (void)writeable;
-        (void)executable;
-        return ENOSYS; /* Unimplemented */
+        new->next = as->first_region;
+        as->first_region = new;
+
+        //should we check that there are no clashes?
+        new->vbase = vaddr;
+        new->size = memsize;
+        new->readable = readable;
+        new->writeable = writeable;
+        new->executable = executable;
+
+        return 0;
 }
 
 int
