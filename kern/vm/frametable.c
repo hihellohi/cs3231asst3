@@ -105,19 +105,8 @@ void free_kpages(vaddr_t addr)
         spinlock_acquire(&stealmem_lock);
         frame_table[entry].used = false;
 
-        if (&frame_table[entry] < next_free) {
-                frame_table[entry].next_free = next_free;
-                next_free = &frame_table[entry];
-        }
-        else {
-                for (size_t i = entry; i > 0; i--) {
-                        if (frame_table[i].used == false) {
-                                frame_table[entry].next_free = frame_table[i].next_free;
-                                frame_table[i].next_free = &frame_table[entry];
-                                break;
-                        }
-                }
-        }
+        frame_table[entry].next_free = next_free;
+        next_free = &frame_table[entry];
         spinlock_release(&stealmem_lock);
 }
 
