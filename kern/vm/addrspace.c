@@ -58,9 +58,7 @@ as_create(void)
                 return NULL;
         }
 
-        /*
-         * Initialize as needed.
-         */
+		as->first_region = NULL;
 
         return as;
 }
@@ -75,11 +73,13 @@ as_copy(struct addrspace *old, struct addrspace **ret)
                 return ENOMEM;
         }
 
-        /*
-         * Write this.
-         */
-
-        (void)old;
+		as_region *curold, *curnew;
+		for(curold = &old->first_region, curnew = &newas->first_region; 
+                        *curold;
+                        curold = &((*curold)->next), curnew = &((*curnew)->next)){
+                *curnew = kmalloc(sizeof(struct _as_region));
+                **curnew = **curold;
+		}
 
         *ret = newas;
         return 0;
@@ -88,9 +88,12 @@ as_copy(struct addrspace *old, struct addrspace **ret)
 void
 as_destroy(struct addrspace *as)
 {
-        /*
-         * Clean up as needed.
-         */
+		as_region cur = as->first_region, old;
+        while(cur){
+                old = cur;
+                cur = cur->next;
+                kfree(old);
+		}
 
         kfree(as);
 }
