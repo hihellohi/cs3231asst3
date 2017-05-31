@@ -162,15 +162,17 @@ as_define_region(struct addrspace *as, vaddr_t vaddr, size_t memsize,
                 return ENOMEM;
         }
 
+        if(!(readable || writeable || executable)) {
+                return 0;
+        }
+
         new->next = as->first_region;
         as->first_region = new;
 
         //should we check that there are no clashes?
         new->vbase = vaddr;
         new->size = memsize;
-        new->readable = readable;
         new->writeable = writeable;
-        new->executable = executable;
 
         return 0;
 }
@@ -198,10 +200,10 @@ as_define_stack(struct addrspace *as, vaddr_t *stackptr)
          * Write this.
          */
 
-        (void)as;
 
         /* Initial user-level stack pointer */
         *stackptr = USERSTACK;
+        as_define_region(as, USERSTACK - (PAGE_SIZE * 16), PAGE_SIZE * 16, 1, 1, 0);
 
         return 0;
 }

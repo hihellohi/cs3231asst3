@@ -12,9 +12,8 @@
 
 /* Place your page table functions here */
 static struct lock *page_table_lock;
-uint32_t hpt_hash(struct addrspace *as, vaddr_t faultaddr);
 
-uint32_t hpt_hash(struct addrspace *as, vaddr_t faultaddr)
+static uint32_t hpt_hash(struct addrspace *as, vaddr_t faultaddr)
 {
         uint32_t index;
 
@@ -30,6 +29,16 @@ void vm_bootstrap(void)
         */
         frametable_bootstrap();
         page_table_lock = lock_create("page_table_lock");
+}
+
+static as_region find_region(struct addrspace *as, vaddr_t faultaddress) {
+        as_region region;
+        for(region = as->first_region; region; region = region->next){
+                if(region->vbase <= faultaddress && region->vbase + region->size > faultaddress){
+                        break;
+                }
+        }
+        return region;
 }
 
 int
@@ -84,6 +93,11 @@ vm_fault(int faulttype, vaddr_t faultaddress)
         }
 
         if (found == false) {
+                as_region region = find_region(as, faultaddress);
+                if(!region){
+                        return EFAULT;
+                }
+
                 paddr_t paddr = KVADDR_TO_PADDR(alloc_kpages(1));
                 if (paddr == 0) {
                         lock_release(page_table_lock);
@@ -101,7 +115,10 @@ vm_fault(int faulttype, vaddr_t faultaddress)
                 new->pid = (uint32_t) as;
                 new->vaddr = faultaddress;
                 new->next = NULL;
-                new->elo = paddr | TLBLO_DIRTY | TLBLO_VALID;
+                new->elo = paddr | TLBLO_VALID;
+                if(region->writeable || as->readable_mask) {
+                        new->elo |= TLBLO_DIRTY;
+                }
                 elo = new->elo;
         }
         lock_release(page_table_lock);
