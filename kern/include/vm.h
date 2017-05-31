@@ -30,6 +30,8 @@
 #ifndef _VM_H_
 #define _VM_H_
 
+struct addrspace;
+
 /*
  * VM system-related definitions.
  *
@@ -56,6 +58,7 @@ struct page_table_entry **page_table;
 #define VM_FAULT_WRITE       1    /* A write was attempted */
 #define VM_FAULT_READONLY    2    /* A write to a readonly page was attempted*/
 
+int vm_copy(struct addrspace *old, struct addrspace *newas);
 
 /* Initialization function */
 void vm_bootstrap(void);

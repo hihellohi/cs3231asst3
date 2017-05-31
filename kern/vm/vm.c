@@ -41,6 +41,13 @@ static as_region find_region(struct addrspace *as, vaddr_t faultaddress) {
         return region;
 }
 
+int vm_copy(struct addrspace *old, struct addrspace *newas) 
+{
+        (void)old;
+        (void)newas;
+        return 0;
+}
+
 int
 vm_fault(int faulttype, vaddr_t faultaddress)
 {
@@ -116,7 +123,7 @@ vm_fault(int faulttype, vaddr_t faultaddress)
                 new->vaddr = faultaddress;
                 new->next = NULL;
                 new->elo = paddr | TLBLO_VALID;
-                if(region->writeable || as->readable_mask) {
+                if(region->writeable) {
                         new->elo |= TLBLO_DIRTY;
                 }
                 elo = new->elo;

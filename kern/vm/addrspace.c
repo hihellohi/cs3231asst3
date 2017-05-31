@@ -180,7 +180,7 @@ as_define_region(struct addrspace *as, vaddr_t vaddr, size_t memsize,
 int
 as_prepare_load(struct addrspace *as)
 {
-        as->readable_mask = 1;
+        as->readable_mask = TLBLO_DIRTY;
         as_activate();
         return 0;
 }
@@ -196,14 +196,12 @@ as_complete_load(struct addrspace *as)
 int
 as_define_stack(struct addrspace *as, vaddr_t *stackptr)
 {
-        /*
-         * Write this.
-         */
-
-
         /* Initial user-level stack pointer */
         *stackptr = USERSTACK;
-        as_define_region(as, USERSTACK - (PAGE_SIZE * 16), PAGE_SIZE * 16, 1, 1, 0);
+        int err = as_define_region(as, USERSTACK - (PAGE_SIZE * 16), PAGE_SIZE * 16, 1, 1, 0);
+        if(err) {
+                return err;
+        }
 
         return 0;
 }
