@@ -100,9 +100,6 @@ void free_kpages(vaddr_t addr)
                 return;
         }
         paddr_t paddr = KVADDR_TO_PADDR(addr);
-        if (paddr > ram_getsize()) {
-                return;
-        }
         unsigned entry = paddr / PAGE_SIZE;
 
         spinlock_acquire(&stealmem_lock);
