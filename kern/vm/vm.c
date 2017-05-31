@@ -31,14 +31,14 @@ void vm_bootstrap(void)
         page_table_lock = lock_create("page_table_lock");
 }
 
-static as_region find_region(struct addrspace *as, vaddr_t faultaddress) {
-        as_region region;
-        for(region = as->first_region; region; region = region->next){
-                if(region->vbase <= faultaddress && region->vbase + region->size > faultaddress){
-                        break;
+static as_region find_region(struct addrspace *as, vaddr_t faultaddress)
+{
+        for (as_region region = as->first_region; region; region = region->next) {
+                if (region->vbase <= faultaddress && (region->vbase + region->size) > faultaddress) {
+                        return region;
                 }
         }
-        return region;
+        return NULL;
 }
 
 int vm_copy(struct addrspace *old, struct addrspace *newas) 
@@ -101,7 +101,8 @@ vm_fault(int faulttype, vaddr_t faultaddress)
 
         if (found == false) {
                 as_region region = find_region(as, faultaddress);
-                if(!region){
+                if (!region) {
+                        lock_release(page_table_lock);
                         return EFAULT;
                 }
 
@@ -123,7 +124,7 @@ vm_fault(int faulttype, vaddr_t faultaddress)
                 new->vaddr = faultaddress;
                 new->next = NULL;
                 new->elo = paddr | TLBLO_VALID;
-                if(region->writeable) {
+                if (region->writeable) {
                         new->elo |= TLBLO_DIRTY;
                 }
                 elo = new->elo;

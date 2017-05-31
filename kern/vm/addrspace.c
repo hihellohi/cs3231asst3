@@ -169,7 +169,6 @@ as_define_region(struct addrspace *as, vaddr_t vaddr, size_t memsize,
         new->next = as->first_region;
         as->first_region = new;
 
-        //should we check that there are no clashes?
         new->vbase = vaddr;
         new->size = memsize;
         new->writeable = writeable;
