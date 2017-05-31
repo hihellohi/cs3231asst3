@@ -111,7 +111,7 @@ vm_fault(int faulttype, vaddr_t faultaddress)
                         lock_release(page_table_lock);
                         return ENOMEM;
                 }
-                bzero((void*) paddr, PAGE_SIZE);
+                bzero((void*) PADDR_TO_KVADDR(paddr), PAGE_SIZE);
 
                 struct page_table_entry *new = kmalloc(sizeof(struct page_table_entry));
                 if (prev == NULL) {

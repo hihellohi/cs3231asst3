@@ -15,7 +15,7 @@ static struct frame_table_entry *next_free = NULL;
 static struct spinlock stealmem_lock = SPINLOCK_INITIALIZER;
 
 void frametable_bootstrap(void) {
-        paddr_t top_of_ram = ram_getsize();
+        vaddr_t top_of_ram = PADDR_TO_KVADDR(ram_getsize());
         size_t nframes =  top_of_ram / PAGE_SIZE;
         paddr_t location = top_of_ram - (nframes * sizeof(struct frame_table_entry));
         frame_table = (struct frame_table_entry *) location;
@@ -96,6 +96,9 @@ vaddr_t alloc_kpages(unsigned int npages)
 
 void free_kpages(vaddr_t addr)
 {
+        if (frame_table == NULL) {
+                return;
+        }
         paddr_t paddr = KVADDR_TO_PADDR(addr);
         if (paddr > ram_getsize()) {
                 return;
