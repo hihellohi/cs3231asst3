@@ -15,13 +15,13 @@ static struct frame_table_entry *next_free = NULL;
 static struct spinlock stealmem_lock = SPINLOCK_INITIALIZER;
 
 void frametable_bootstrap(void) {
-        vaddr_t top_of_ram = PADDR_TO_KVADDR(ram_getsize());
+        paddr_t top_of_ram = ram_getsize();
         size_t nframes =  top_of_ram / PAGE_SIZE;
         paddr_t location = top_of_ram - (nframes * sizeof(struct frame_table_entry));
-        frame_table = (struct frame_table_entry *) location;
+        frame_table = (struct frame_table_entry *) PADDR_TO_KVADDR(location);
 
         location -= nframes * 2 * sizeof(struct page_table_entry *);
-        page_table = (struct page_table_entry **) location;
+        page_table = (struct page_table_entry **) PADDR_TO_KVADDR(location);
 
         // mark memory used by frame_table and page_table as used
         // location / PAGE_SIZE should round down to the appropriate page
