@@ -169,6 +169,7 @@ as_define_region(struct addrspace *as, vaddr_t vaddr, size_t memsize,
         }
 
         if(!(readable || writeable || executable)) {
+                kfree(new);
                 return 0;
         }
 

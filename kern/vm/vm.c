@@ -151,11 +151,11 @@ vm_fault(int faulttype, vaddr_t faultaddress)
         uint32_t elo;
         uint32_t hash = hpt_hash(as, faultaddress);
 
+        lock_acquire(page_table_lock);
         struct page_table_entry *entry = page_table[hash];
 
         bool found = false;
 
-        lock_acquire(page_table_lock);
         while (entry != NULL) {
                 if (entry->vaddr == faultaddress && entry->pid == (uint32_t) as) {
                         elo = entry->elo;
@@ -172,17 +172,21 @@ vm_fault(int faulttype, vaddr_t faultaddress)
                         return EFAULT;
                 }
 
-                paddr_t paddr = KVADDR_TO_PADDR(alloc_kpages(1));
-                if (paddr == 0) {
+                vaddr_t vaddr = alloc_kpages(1);
+                if (vaddr == 0) {
                         return ENOMEM;
                 }
-                bzero((void*) PADDR_TO_KVADDR(paddr), PAGE_SIZE);
+                bzero((void*) vaddr, PAGE_SIZE);
 
                 struct page_table_entry *new = kmalloc(sizeof(struct page_table_entry));
+                if (!new) {
+                        free_kpages(vaddr);
+                        return ENOMEM;
+                }
 
                 new->pid = (uint32_t) as;
                 new->vaddr = faultaddress;
-                new->elo = paddr | TLBLO_VALID;
+                new->elo = KVADDR_TO_PADDR(vaddr) | TLBLO_VALID;
                 if (region->writeable) {
                         new->elo |= TLBLO_DIRTY;
                 }
