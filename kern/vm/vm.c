@@ -62,12 +62,7 @@ void vm_destroy(struct addrspace *as)
                                 }
                                 kfree(cur);
 
-                                if(!prev){
-                                        cur = page_table[i];
-                                }
-                                else{
-                                        cur = prev->next;
-                                }
+                                cur = prev ? prev->next : page_table[i];
                         }
                         else{
                                 prev = cur;
