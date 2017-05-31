@@ -131,6 +131,7 @@ vm_fault(int faulttype, vaddr_t faultaddress)
         }
         lock_release(page_table_lock);
 
+        elo |= as->writeable_mask;
         int spl = splhigh();
         tlb_random(faultaddress, elo);
         splx(spl);

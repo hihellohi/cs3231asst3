@@ -59,6 +59,7 @@ as_create(void)
         }
 
         as->first_region = NULL;
+        as->writeable_mask = 0;
 
         return as;
 }
@@ -179,7 +180,7 @@ as_define_region(struct addrspace *as, vaddr_t vaddr, size_t memsize,
 int
 as_prepare_load(struct addrspace *as)
 {
-        as->readable_mask = TLBLO_DIRTY;
+        as->writeable_mask = TLBLO_DIRTY;
         as_activate();
         return 0;
 }
@@ -187,7 +188,7 @@ as_prepare_load(struct addrspace *as)
 int
 as_complete_load(struct addrspace *as)
 {
-        as->readable_mask = 0;
+        as->writeable_mask = 0;
         as_activate();
         return 0;
 }
