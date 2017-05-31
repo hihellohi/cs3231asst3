@@ -41,40 +41,31 @@ static as_region find_region(struct addrspace *as, vaddr_t faultaddress)
         return NULL;
 }
 
-static void free_all(struct page_table_entry *cur)
+void vm_destroy(struct addrspace *as)
 {
-        struct page_table_entry *old;
-        while(cur){
-                old = cur;
-                cur = cur->next;
-
-                if(old->vaddr & PAGE_FRAME){
-                        free_kpages(old->vaddr & PAGE_FRAME);
-                }
-                kfree(old);
-        }
-}
-
-static void add_all(struct page_table_entry *cur)
-{
-        struct page_table_entry *old;
-        while(cur){
-                old = cur;
-                cur = cur->next;
-
-                int hash = hpt_hash((struct addrspace *)old->pid, old->vaddr);
+        size_t i;
+        for(i = 0; i < table_size; i++){
+                struct page_table_entry *cur, *prev = NULL;
 
                 lock_acquire(page_table_lock);
-                old->next = page_table[hash];
-                page_table[hash] = old;
+                for(cur = page_table[i]; cur; prev = cur, cur = cur->next){
+
+                        if(cur->pid == (uint32_t) as){
+                                prev->next = cur->next;
+                                if(cur->vaddr & PAGE_FRAME){
+                                        free_kpages(cur->vaddr & PAGE_FRAME);
+                                }
+                                kfree(cur);
+
+                                cur = prev;
+                        }
+                }
                 lock_release(page_table_lock);
         }
 }
 
 int vm_copy(struct addrspace *old, struct addrspace *newas) 
 {
-        struct page_table_entry *new_entries = NULL;
-
         size_t i;
         for(i = 0; i < table_size; i++){
                 struct page_table_entry *cur;
@@ -86,13 +77,11 @@ int vm_copy(struct addrspace *old, struct addrspace *newas)
 
                                 struct page_table_entry *new = kmalloc(sizeof(struct page_table_entry));
                                 if(!new){
-                                        free_all(new_entries);
                                         return ENOMEM;
                                 }
 
                                 new->elo = alloc_kpages(1);
                                 if(!new->elo){
-                                        free_all(new_entries);
                                         return ENOMEM;
                                 }
 
@@ -103,15 +92,16 @@ int vm_copy(struct addrspace *old, struct addrspace *newas)
                                 new->vaddr = cur->vaddr;
                                 new->pid = (uint32_t)newas;
 
-                                new->next = new_entries;
-                                new_entries = new;
+                                int hash = hpt_hash((struct addrspace *)new->pid, new->vaddr);
+                                lock_acquire(page_table_lock);
+                                new->next = page_table[hash];
+                                page_table[hash] = new;
+                                lock_release(page_table_lock);
                         }
                         lock_acquire(page_table_lock);
                 }
                 lock_release(page_table_lock);
         }
-
-        add_all(new_entries);
 
         return 0;
 }
@@ -170,13 +160,11 @@ vm_fault(int faulttype, vaddr_t faultaddress)
         if (found == false) {
                 as_region region = find_region(as, full_faultaddress);
                 if (!region) {
-                        lock_release(page_table_lock);
                         return EFAULT;
                 }
 
                 paddr_t paddr = KVADDR_TO_PADDR(alloc_kpages(1));
                 if (paddr == 0) {
-                        lock_release(page_table_lock);
                         return ENOMEM;
                 }
                 bzero((void*) PADDR_TO_KVADDR(paddr), PAGE_SIZE);

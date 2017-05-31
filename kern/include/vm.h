@@ -60,6 +60,7 @@ size_t table_size;
 #define VM_FAULT_READONLY    2    /* A write to a readonly page was attempted*/
 
 int vm_copy(struct addrspace *old, struct addrspace *newas);
+void vm_destroy(struct addrspace *as);
 
 /* Initialization function */
 void vm_bootstrap(void);

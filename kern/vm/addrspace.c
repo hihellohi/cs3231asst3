@@ -88,7 +88,11 @@ as_copy(struct addrspace *old, struct addrspace **ret)
                 **curnew = **curold;
         }
 
-        //Need to copy over frames
+        int err = vm_copy(old, newas);
+        if(err) {
+                as_destroy(newas);
+                return err;
+        }
 
         *ret = newas;
         return 0;
@@ -97,6 +101,7 @@ as_copy(struct addrspace *old, struct addrspace **ret)
 void
 as_destroy(struct addrspace *as)
 {
+        vm_destroy(as);
         as_region cur = as->first_region, old;
         while(cur){
                 old = cur;
