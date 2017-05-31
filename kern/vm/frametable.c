@@ -49,6 +49,7 @@ void frametable_bootstrap(void) {
                 frame_table[i].used = false;
                 frame_table[i].next_free = &(frame_table[i + 1]);
         }
+        frame_table[(location / PAGE_SIZE) - 1].next_free = NULL;
 }
 
 /* Note that this function returns a VIRTUAL address, not a physical 
@@ -102,9 +103,6 @@ void free_kpages(vaddr_t addr)
                 return;
         }
         paddr_t paddr = KVADDR_TO_PADDR(addr);
-        if (paddr > ram_getsize()) {
-                return;
-        }
         unsigned entry = paddr / PAGE_SIZE;
 
         spinlock_acquire(&stealmem_lock);
