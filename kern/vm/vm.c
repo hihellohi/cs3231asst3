@@ -85,11 +85,14 @@ int vm_copy(struct addrspace *old, struct addrspace *newas)
 
                                 struct page_table_entry *new = kmalloc(sizeof(struct page_table_entry));
                                 if(!new){
+                                        lock_release(page_table_lock);
                                         return ENOMEM;
                                 }
 
                                 new->elo = KVADDR_TO_PADDR(alloc_kpages(1));
                                 if(!new->elo){
+                                        kfree(new);
+                                        lock_release(page_table_lock);
                                         return ENOMEM;
                                 }
 
@@ -100,7 +103,7 @@ int vm_copy(struct addrspace *old, struct addrspace *newas)
                                 new->vaddr = cur->vaddr;
                                 new->pid = (uint32_t)newas;
 
-                                int hash = hpt_hash((struct addrspace *)new->pid, new->vaddr);
+                                int hash = hpt_hash(newas, new->vaddr);
                                 new->next = page_table[hash];
                                 page_table[hash] = new;
                         }
