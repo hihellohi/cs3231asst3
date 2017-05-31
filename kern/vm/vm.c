@@ -3,6 +3,7 @@
 #include <lib.h>
 #include <spl.h>
 #include <proc.h>
+#include <synch.h>
 #include <current.h>
 #include <thread.h>
 #include <addrspace.h>
@@ -10,6 +11,7 @@
 #include <machine/tlb.h>
 
 /* Place your page table functions here */
+static struct lock *page_table_lock;
 uint32_t hpt_hash(struct addrspace *as, vaddr_t faultaddr);
 
 uint32_t hpt_hash(struct addrspace *as, vaddr_t faultaddr)
@@ -27,6 +29,7 @@ void vm_bootstrap(void)
            frame table here as well.
         */
         frametable_bootstrap();
+        page_table_lock = lock_create("page_table_lock");
 }
 
 int
@@ -64,12 +67,14 @@ vm_fault(int faulttype, vaddr_t faultaddress)
 
         uint32_t elo;
         uint32_t hash = hpt_hash(as, faultaddress);
+
+        lock_acquire(page_table_lock);
         struct page_table_entry *entry = page_table[hash];
         struct page_table_entry *prev = NULL;
 
         bool found = false;
         while (entry != NULL) {
-                if (entry->vaddr == faultaddress) {
+                if (entry->vaddr == faultaddress && entry->pid == (uint32_t) as) {
                         elo = entry->elo;
                         found = true;
                         break;
@@ -79,6 +84,13 @@ vm_fault(int faulttype, vaddr_t faultaddress)
         }
 
         if (found == false) {
+                paddr_t paddr = KVADDR_TO_PADDR(alloc_kpages(1));
+                if (paddr == 0) {
+                        lock_release(page_table_lock);
+                        return ENOMEM;
+                }
+                bzero((void*) paddr, PAGE_SIZE);
+
                 struct page_table_entry *new = kmalloc(sizeof(struct page_table_entry));
                 if (prev == NULL) {
                         page_table[hash] = new;
@@ -86,16 +98,13 @@ vm_fault(int faulttype, vaddr_t faultaddress)
                 else {
                         prev->next = new;
                 }
-                paddr_t paddr = KVADDR_TO_PADDR(alloc_kpages(1));
-                if (paddr == 0) {
-                        return ENOMEM;
-                }
                 new->pid = (uint32_t) as;
                 new->vaddr = faultaddress;
                 new->next = NULL;
                 new->elo = paddr | TLBLO_DIRTY | TLBLO_VALID;
                 elo = new->elo;
         }
+        lock_release(page_table_lock);
 
         int spl = splhigh();
         tlb_random(faultaddress, elo);
