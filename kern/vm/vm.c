@@ -45,19 +45,33 @@ void vm_destroy(struct addrspace *as)
 {
         size_t i;
         for(i = 0; i < table_size; i++){
-                struct page_table_entry *cur, *prev = NULL;
-
                 lock_acquire(page_table_lock);
-                for(cur = page_table[i]; cur; prev = cur, cur = cur->next){
+                struct page_table_entry *cur = page_table[i], *prev = NULL;
 
+                while(cur){
                         if(cur->pid == (uint32_t) as){
-                                prev->next = cur->next;
-                                if(cur->vaddr & PAGE_FRAME){
-                                        free_kpages(cur->vaddr & PAGE_FRAME);
+                                if(!prev){
+                                        page_table[i] = cur->next;
+                                }
+                                else{
+                                        prev->next = cur->next;
+                                }
+
+                                if(cur->elo & PAGE_FRAME){
+                                        free_kpages(PADDR_TO_KVADDR(cur->elo & PAGE_FRAME));
                                 }
                                 kfree(cur);
 
-                                cur = prev;
+                                if(!prev){
+                                        cur = page_table[i];
+                                }
+                                else{
+                                        cur = prev->next;
+                                }
+                        }
+                        else{
+                                prev = cur;
+                                cur = cur->next;
                         }
                 }
                 lock_release(page_table_lock);
