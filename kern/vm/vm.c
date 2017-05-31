@@ -18,7 +18,7 @@ static uint32_t hpt_hash(struct addrspace *as, vaddr_t faultaddr)
         uint32_t index;
 
         // calling ram_getsize() okay?
-        index = (((uint32_t )as) ^ (faultaddr >> PAGE_BITS)) % (ram_getsize() * 2);
+        index = (((uint32_t )as) ^ (faultaddr >> PAGE_BITS)) % table_size;
         return index;
 }
 
@@ -41,16 +41,66 @@ static as_region find_region(struct addrspace *as, vaddr_t faultaddress)
         return NULL;
 }
 
+static void free_all(struct page_table_entry *cur)
+{
+        struct page_table_entry *old;
+        while(cur){
+                old = cur;
+                cur = cur->next;
+                kfree(old);
+        }
+}
+
+static void add_all(struct page_table_entry *cur)
+{
+        struct page_table_entry *old;
+        while(cur){
+                old = cur;
+                cur = cur->next;
+
+                int hash = hpt_hash((struct addrspace *)old->pid, old->vaddr);
+                old->next = page_table[hash];
+                page_table[hash] = old;
+        }
+}
+
 int vm_copy(struct addrspace *old, struct addrspace *newas) 
 {
-        (void)old;
-        (void)newas;
+        struct page_table_entry *new_entries = NULL;
+        lock_acquire(page_table_lock);
+
+        size_t i;
+        for(i = 0; i < table_size; i++){
+                struct page_table_entry *cur;
+                for(cur = page_table[i]; cur; cur = cur->next){
+                        if(cur->pid == (uint32_t) old){
+
+                                struct page_table_entry *new = kmalloc(sizeof(struct page_table_entry));
+                                if(!new){
+                                        free_all(new_entries);
+                                        return ENOMEM;
+                                }
+
+                                new->vaddr = cur->vaddr;
+                                new->pid = (uint32_t)newas;
+                                //Copy frame update elo
+
+                                new->next = new_entries;
+                                new_entries = new;
+                        }
+                }
+        }
+
+        add_all(new_entries);
+
+        lock_release(page_table_lock);
         return 0;
 }
 
 int
 vm_fault(int faulttype, vaddr_t faultaddress)
 {
+        vaddr_t full_faultaddress = faultaddress;
         faultaddress &= PAGE_FRAME;
 
         switch (faulttype) {
@@ -86,7 +136,6 @@ vm_fault(int faulttype, vaddr_t faultaddress)
 
         lock_acquire(page_table_lock);
         struct page_table_entry *entry = page_table[hash];
-        struct page_table_entry *prev = NULL;
 
         bool found = false;
         while (entry != NULL) {
@@ -95,12 +144,11 @@ vm_fault(int faulttype, vaddr_t faultaddress)
                         found = true;
                         break;
                 }
-                prev = entry;
                 entry = entry->next;
         }
 
         if (found == false) {
-                as_region region = find_region(as, faultaddress);
+                as_region region = find_region(as, full_faultaddress);
                 if (!region) {
                         lock_release(page_table_lock);
                         return EFAULT;
@@ -114,15 +162,11 @@ vm_fault(int faulttype, vaddr_t faultaddress)
                 bzero((void*) PADDR_TO_KVADDR(paddr), PAGE_SIZE);
 
                 struct page_table_entry *new = kmalloc(sizeof(struct page_table_entry));
-                if (prev == NULL) {
-                        page_table[hash] = new;
-                }
-                else {
-                        prev->next = new;
-                }
+                new->next = page_table[hash];
+                page_table[hash] = new;
+
                 new->pid = (uint32_t) as;
                 new->vaddr = faultaddress;
-                new->next = NULL;
                 new->elo = paddr | TLBLO_VALID;
                 if (region->writeable) {
                         new->elo |= TLBLO_DIRTY;
