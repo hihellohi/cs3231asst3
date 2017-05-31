@@ -72,7 +72,6 @@ int vm_copy(struct addrspace *old, struct addrspace *newas)
 
                 lock_acquire(page_table_lock);
                 for(cur = page_table[i]; cur; cur = cur->next){
-                        lock_release(page_table_lock);
                         if(cur->pid == (uint32_t) old){
 
                                 struct page_table_entry *new = kmalloc(sizeof(struct page_table_entry));
@@ -80,7 +79,7 @@ int vm_copy(struct addrspace *old, struct addrspace *newas)
                                         return ENOMEM;
                                 }
 
-                                new->elo = alloc_kpages(1);
+                                new->elo = KVADDR_TO_PADDR(alloc_kpages(1));
                                 if(!new->elo){
                                         return ENOMEM;
                                 }
@@ -93,12 +92,9 @@ int vm_copy(struct addrspace *old, struct addrspace *newas)
                                 new->pid = (uint32_t)newas;
 
                                 int hash = hpt_hash((struct addrspace *)new->pid, new->vaddr);
-                                lock_acquire(page_table_lock);
                                 new->next = page_table[hash];
                                 page_table[hash] = new;
-                                lock_release(page_table_lock);
                         }
-                        lock_acquire(page_table_lock);
                 }
                 lock_release(page_table_lock);
         }
@@ -143,10 +139,11 @@ vm_fault(int faulttype, vaddr_t faultaddress)
         uint32_t elo;
         uint32_t hash = hpt_hash(as, faultaddress);
 
-        lock_acquire(page_table_lock);
         struct page_table_entry *entry = page_table[hash];
 
         bool found = false;
+
+        lock_acquire(page_table_lock);
         while (entry != NULL) {
                 if (entry->vaddr == faultaddress && entry->pid == (uint32_t) as) {
                         elo = entry->elo;
