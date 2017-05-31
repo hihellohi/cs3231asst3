@@ -47,6 +47,10 @@ static void free_all(struct page_table_entry *cur)
         while(cur){
                 old = cur;
                 cur = cur->next;
+
+                if(old->vaddr & PAGE_FRAME){
+                        free_kpages(old->vaddr & PAGE_FRAME);
+                }
                 kfree(old);
         }
 }
@@ -59,20 +63,25 @@ static void add_all(struct page_table_entry *cur)
                 cur = cur->next;
 
                 int hash = hpt_hash((struct addrspace *)old->pid, old->vaddr);
+
+                lock_acquire(page_table_lock);
                 old->next = page_table[hash];
                 page_table[hash] = old;
+                lock_release(page_table_lock);
         }
 }
 
 int vm_copy(struct addrspace *old, struct addrspace *newas) 
 {
         struct page_table_entry *new_entries = NULL;
-        lock_acquire(page_table_lock);
 
         size_t i;
         for(i = 0; i < table_size; i++){
                 struct page_table_entry *cur;
+
+                lock_acquire(page_table_lock);
                 for(cur = page_table[i]; cur; cur = cur->next){
+                        lock_release(page_table_lock);
                         if(cur->pid == (uint32_t) old){
 
                                 struct page_table_entry *new = kmalloc(sizeof(struct page_table_entry));
@@ -81,19 +90,29 @@ int vm_copy(struct addrspace *old, struct addrspace *newas)
                                         return ENOMEM;
                                 }
 
+                                new->elo = alloc_kpages(1);
+                                if(!new->elo){
+                                        free_all(new_entries);
+                                        return ENOMEM;
+                                }
+
+                                memcpy((void*)PADDR_TO_KVADDR(new->elo), (void*)PADDR_TO_KVADDR(cur->elo & PAGE_FRAME), PAGE_SIZE);
+
+                                new->elo |= (cur->elo & ~PAGE_FRAME);
+
                                 new->vaddr = cur->vaddr;
                                 new->pid = (uint32_t)newas;
-                                //Copy frame update elo
 
                                 new->next = new_entries;
                                 new_entries = new;
                         }
+                        lock_acquire(page_table_lock);
                 }
+                lock_release(page_table_lock);
         }
 
         add_all(new_entries);
 
-        lock_release(page_table_lock);
         return 0;
 }
 
@@ -146,6 +165,7 @@ vm_fault(int faulttype, vaddr_t faultaddress)
                 }
                 entry = entry->next;
         }
+        lock_release(page_table_lock);
 
         if (found == false) {
                 as_region region = find_region(as, full_faultaddress);
@@ -162,8 +182,6 @@ vm_fault(int faulttype, vaddr_t faultaddress)
                 bzero((void*) PADDR_TO_KVADDR(paddr), PAGE_SIZE);
 
                 struct page_table_entry *new = kmalloc(sizeof(struct page_table_entry));
-                new->next = page_table[hash];
-                page_table[hash] = new;
 
                 new->pid = (uint32_t) as;
                 new->vaddr = faultaddress;
@@ -171,9 +189,14 @@ vm_fault(int faulttype, vaddr_t faultaddress)
                 if (region->writeable) {
                         new->elo |= TLBLO_DIRTY;
                 }
+
+                lock_acquire(page_table_lock);
+                new->next = page_table[hash];
+                page_table[hash] = new;
+                lock_release(page_table_lock);
+
                 elo = new->elo;
         }
-        lock_release(page_table_lock);
 
         elo |= as->writeable_mask;
         int spl = splhigh();

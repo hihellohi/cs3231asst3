@@ -20,7 +20,7 @@ void frametable_bootstrap(void) {
         paddr_t location = top_of_ram - (nframes * sizeof(struct frame_table_entry));
         frame_table = (struct frame_table_entry *) PADDR_TO_KVADDR(location);
 
-		table_size = nframes * 2;
+        table_size = nframes * 2;
 
         location -= table_size * sizeof(struct page_table_entry *);
         page_table = (struct page_table_entry **) PADDR_TO_KVADDR(location);
