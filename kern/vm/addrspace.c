@@ -87,6 +87,8 @@ as_copy(struct addrspace *old, struct addrspace **ret)
                 **curnew = **curold;
         }
 
+        //Need to copy over frames
+
         *ret = newas;
         return 0;
 }
@@ -176,22 +178,16 @@ as_define_region(struct addrspace *as, vaddr_t vaddr, size_t memsize,
 int
 as_prepare_load(struct addrspace *as)
 {
-        /*
-         * Write this.
-         */
-
-        (void)as;
+        as->readable_mask = 1;
+        as_activate();
         return 0;
 }
 
 int
 as_complete_load(struct addrspace *as)
 {
-        /*
-         * Write this.
-         */
-
-        (void)as;
+        as->readable_mask = 0;
+        as_activate();
         return 0;
 }
 
