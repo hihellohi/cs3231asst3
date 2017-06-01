@@ -205,8 +205,10 @@ as_define_stack(struct addrspace *as, vaddr_t *stackptr)
 {
         /* Initial user-level stack pointer */
         *stackptr = USERSTACK;
-        int err = as_define_region(as, USERSTACK - (PAGE_SIZE * 16), PAGE_SIZE * 16, 1, 1, 0);
+        as->stack_pointer = USERSTACK - (PAGE_SIZE * 16);
+        int err = as_define_region(as, as->stack_pointer, PAGE_SIZE * 16, 1, 1, 0);
         if(err) {
+                as->stack_pointer = 0;
                 return err;
         }
 

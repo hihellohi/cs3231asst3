@@ -163,25 +163,17 @@ int
 sys_sbrk(intptr_t change, vaddr_t *retval) {
         struct addrspace *as = proc_getas();
 
-        if(change < 0 && as->heap->size > (size_t)-change){
-                return EINVAL;
-        }
-
-        if(as->heap->size + change >= (uint32_t)as->stack_pointer){
-                return EINVAL;
-        }
-
         if(!as->heap) {
                 vaddr_t highest = PAGE_SIZE;
                 as_region cur;
                 for(cur = as->first_region; cur; cur = cur->next){
                         vaddr_t newregion = cur->vbase + cur->size;
-                        vaddr_t candidate = newregion & PAGE_BITS;
+                        vaddr_t candidate = newregion & PAGE_FRAME;
                         if(candidate != newregion){
                                 candidate += PAGE_SIZE;
                         }
 
-                        if(candidate > highest && candidate < as->stack_pointer) {
+                        if(candidate > highest && candidate < as->stack_pointer - 1) {
                                 highest = candidate;
                         }
                 }
