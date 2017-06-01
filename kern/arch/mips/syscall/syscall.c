@@ -227,7 +227,7 @@ syscall(struct trapframe *tf)
 		err = sys_sync();
 		break;
 	    case SYS_sbrk:
-		err = sys_sbrk(tf->tf_a0, &retval);
+		err = sys_sbrk(tf->tf_a0, (vaddr_t *)&retval);
 		break;
 	    case SYS_mkdir:
 		err = sys_mkdir((userptr_t)tf->tf_a0, tf->tf_a1);

@@ -160,5 +160,17 @@ sys_waitpid(pid_t pid, userptr_t retstatus, int flags, pid_t *retval)
 
 int
 sys_sbrk(intptr_t change, vaddr_t *retval) {
+        struct addrspace *as = proc_getas();
 
+        //if(as->heap->size + change < 0){
+        //        return EINVAL;
+        //}
+
+        //if(as->heap->size + change >= (uint32_t)as->stack_pointer){
+        //        return EINVAL;
+        //}
+        (void)as;
+        (void)change;
+        (void)retval;
+        return 0;
 }

@@ -72,6 +72,8 @@ struct addrspace {
         /* Put stuff here for your VM system */
         as_region first_region;
         as_region heap;
+
+        vaddr_t stack_pointer;
         int writeable_mask;
 #endif
 };
