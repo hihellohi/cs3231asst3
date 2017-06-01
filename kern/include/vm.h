@@ -38,7 +38,7 @@ struct addrspace;
  * You'll probably want to add stuff here.
  */
 struct frame_table_entry {
-	bool used;
+	int ref_count;
 	struct frame_table_entry *next_free;
 };
 
@@ -49,7 +49,8 @@ struct page_table_entry {
         uint32_t elo;
 };
 
-struct page_table_entry **page_table;
+extern struct frame_table_entry *frame_table;
+extern struct page_table_entry **page_table;
 size_t table_size;
 
 #include <machine/vm.h>

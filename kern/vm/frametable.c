@@ -9,8 +9,9 @@
  * You probably also want to write a frametable initialisation
  * function and call it from vm_bootstrap
  */
-static struct frame_table_entry *frame_table = NULL;
+struct frame_table_entry *frame_table = NULL;
 static struct frame_table_entry *next_free = NULL;
+struct page_table_entry **page_table = NULL;
 
 static struct spinlock stealmem_lock = SPINLOCK_INITIALIZER;
 
@@ -28,7 +29,7 @@ void frametable_bootstrap(void) {
         // mark memory used by frame_table and page_table as used
         // location / PAGE_SIZE should round down to the appropriate page
         for (size_t i = location / PAGE_SIZE; i < nframes; i++) {
-                frame_table[i].used = true;
+                frame_table[i].ref_count = 1;
                 frame_table[i].next_free = NULL;
         }
         for (size_t i = 0; i < table_size; i++) {
@@ -39,14 +40,14 @@ void frametable_bootstrap(void) {
         // we need to round up
         size_t highest_used = (ram_getfirstfree() + PAGE_SIZE - 1) / PAGE_SIZE;
         for (size_t i = 0; i < highest_used; i++) {
-                frame_table[i].used = true;
+                frame_table[i].ref_count = 1;
                 frame_table[i].next_free = NULL;
         }
         next_free = &(frame_table[highest_used]);
 
         // mark everything else as free memory
         for (size_t i = highest_used; i < location / PAGE_SIZE; i++) {
-                frame_table[i].used = false;
+                frame_table[i].ref_count = 0;
                 frame_table[i].next_free = &(frame_table[i + 1]);
         }
         frame_table[(location / PAGE_SIZE) - 1].next_free = NULL;
@@ -88,7 +89,7 @@ vaddr_t alloc_kpages(unsigned int npages)
                 }
                 else {
                         addr = PADDR_TO_KVADDR((next_free - frame_table) * PAGE_SIZE);
-                        next_free->used = true;
+                        next_free->ref_count = 1;
                         next_free = next_free->next_free;
                 }
                 spinlock_release(&stealmem_lock);
@@ -106,7 +107,7 @@ void free_kpages(vaddr_t addr)
         unsigned entry = paddr / PAGE_SIZE;
 
         spinlock_acquire(&stealmem_lock);
-        frame_table[entry].used = false;
+        frame_table[entry].ref_count = 0;
 
         frame_table[entry].next_free = next_free;
         next_free = &frame_table[entry];
