@@ -129,8 +129,12 @@ int vm_copy(struct addrspace *old, struct addrspace *newas)
 
 static int on_readonly_fault(vaddr_t full_faultaddress) {
         struct addrspace *as = proc_getas();
+        as_region region = find_region(as, full_faultaddress);
+        if (!region) {
+                return EFAULT;
+        }
 
-        if(find_region(as, full_faultaddress)->writeable) {
+        if(region->writeable) {
                 vaddr_t faultaddress = full_faultaddress & PAGE_FRAME;
 
                 struct page_table_entry *entry = page_table_seek(as, faultaddress);
@@ -161,19 +165,6 @@ static int on_readonly_fault(vaddr_t full_faultaddress) {
 int
 vm_fault(int faulttype, vaddr_t faultaddress)
 {
-        vaddr_t full_faultaddress = faultaddress;
-        faultaddress &= PAGE_FRAME;
-
-        switch (faulttype) {
-                case VM_FAULT_READONLY:
-                        return on_readonly_fault(full_faultaddress);
-                case VM_FAULT_READ:
-                case VM_FAULT_WRITE:
-                        break;
-                default:
-                        return EINVAL;
-        }
-
         if (curproc == NULL) {
                 /*
                  * No process. This is probably a kernel fault early
@@ -190,6 +181,19 @@ vm_fault(int faulttype, vaddr_t faultaddress)
                  * kernel fault early in boot.
                  */
                 return EFAULT;
+        }
+
+        vaddr_t full_faultaddress = faultaddress;
+        faultaddress &= PAGE_FRAME;
+
+        switch (faulttype) {
+                case VM_FAULT_READONLY:
+                        return on_readonly_fault(full_faultaddress);
+                case VM_FAULT_READ:
+                case VM_FAULT_WRITE:
+                        break;
+                default:
+                        return EINVAL;
         }
 
         struct page_table_entry *entry = page_table_seek(as, faultaddress);
