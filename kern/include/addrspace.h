@@ -71,6 +71,7 @@ struct addrspace {
 #else
         /* Put stuff here for your VM system */
         as_region first_region;
+        as_region heap;
         int writeable_mask;
 #endif
 };

@@ -59,6 +59,7 @@ as_create(void)
         }
 
         as->first_region = NULL;
+        as->heap = NULL;
         as->writeable_mask = 0;
 
         return as;
