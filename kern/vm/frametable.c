@@ -12,6 +12,7 @@
 struct frame_table_entry *frame_table = NULL;
 static struct frame_table_entry *next_free = NULL;
 struct page_table_entry **page_table = NULL;
+size_t table_size = 0;
 
 static struct spinlock stealmem_lock = SPINLOCK_INITIALIZER;
 

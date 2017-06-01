@@ -51,7 +51,7 @@ struct page_table_entry {
 
 extern struct frame_table_entry *frame_table;
 extern struct page_table_entry **page_table;
-size_t table_size;
+extern size_t table_size;
 
 #include <machine/vm.h>
 
