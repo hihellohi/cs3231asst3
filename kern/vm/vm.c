@@ -22,6 +22,24 @@ static uint32_t hpt_hash(struct addrspace *as, vaddr_t faultaddr)
         return index;
 }
 
+static struct page_table_entry *page_table_seek(struct addrspace *as, vaddr_t faultaddress) {
+
+        uint32_t hash = hpt_hash(as, faultaddress);
+
+        lock_acquire(page_table_lock);
+        struct page_table_entry *entry = page_table[hash];
+
+        while (entry != NULL) {
+                if (entry->vaddr == faultaddress && entry->pid == (uint32_t) as) {
+                        lock_release(page_table_lock);
+                        return entry;
+                }
+                entry = entry->next;
+        }
+        lock_release(page_table_lock);
+        return NULL;
+}
+
 void vm_bootstrap(void)
 {
         /* Initialise VM sub-system.  You probably want to initialise your 
@@ -50,6 +68,7 @@ void vm_destroy(struct addrspace *as)
 
                 while(cur){
                         if(cur->pid == (uint32_t) as){
+                                //TODO decrement
                                 if(!prev){
                                         page_table[i] = cur->next;
                                 }
@@ -89,16 +108,10 @@ int vm_copy(struct addrspace *old, struct addrspace *newas)
                                         return ENOMEM;
                                 }
 
-                                new->elo = KVADDR_TO_PADDR(alloc_kpages(1));
-                                if(!new->elo){
-                                        kfree(new);
-                                        lock_release(page_table_lock);
-                                        return ENOMEM;
-                                }
-
-                                memcpy((void*)PADDR_TO_KVADDR(new->elo), (void*)PADDR_TO_KVADDR(cur->elo & PAGE_FRAME), PAGE_SIZE);
-
-                                new->elo |= (cur->elo & ~PAGE_FRAME);
+                                //TODO increase reference count
+                                
+                                cur->elo &= ~TLBLO_DIRTY;
+                                new->elo = cur->elo;
 
                                 new->vaddr = cur->vaddr;
                                 new->pid = (uint32_t)newas;
@@ -114,6 +127,44 @@ int vm_copy(struct addrspace *old, struct addrspace *newas)
         return 0;
 }
 
+static int onReadonlyFault(vaddr_t full_faultaddress) {
+        struct addrspace *as = proc_getas();
+
+        if(find_region(as, full_faultaddress)->writeable) {
+                vaddr_t faultaddress = full_faultaddress & PAGE_FRAME;
+
+                vaddr_t newframe = KVADDR_TO_PADDR(alloc_kpages(1));
+                if(!newframe){
+                        return ENOMEM;
+                }
+
+                struct page_table_entry *entry = page_table_seek(as, faultaddress);
+                memcpy((void*)PADDR_TO_KVADDR(newframe),
+                                (void*)PADDR_TO_KVADDR(entry->elo & PAGE_FRAME), 
+                                PAGE_SIZE);
+                uint32_t elo = entry->elo = newframe | TLBLO_DIRTY | TLBLO_VALID;
+                //decrement reference count
+                
+                elo |= as->writeable_mask;
+                int spl = splhigh();
+
+                int index = tlb_probe(faultaddress, 0);
+                if(index == -1) {
+                        //entry was overwritten
+                        tlb_random(faultaddress, elo);
+                }
+                else{
+                        tlb_write(faultaddress, elo, index);
+                }
+
+                splx(spl);
+                return 0;
+        }
+        else{
+                return EFAULT;
+        }
+}
+
 int
 vm_fault(int faulttype, vaddr_t faultaddress)
 {
@@ -122,7 +173,7 @@ vm_fault(int faulttype, vaddr_t faultaddress)
 
         switch (faulttype) {
                 case VM_FAULT_READONLY:
-                        return EFAULT;
+                        return onReadonlyFault(full_faultaddress);
                 case VM_FAULT_READ:
                 case VM_FAULT_WRITE:
                         break;
@@ -148,25 +199,13 @@ vm_fault(int faulttype, vaddr_t faultaddress)
                 return EFAULT;
         }
 
+        struct page_table_entry *entry = page_table_seek(as, faultaddress);
         uint32_t elo;
-        uint32_t hash = hpt_hash(as, faultaddress);
 
-        lock_acquire(page_table_lock);
-        struct page_table_entry *entry = page_table[hash];
-
-        bool found = false;
-
-        while (entry != NULL) {
-                if (entry->vaddr == faultaddress && entry->pid == (uint32_t) as) {
-                        elo = entry->elo;
-                        found = true;
-                        break;
-                }
-                entry = entry->next;
+        if (entry) {
+                elo = entry->elo;
         }
-        lock_release(page_table_lock);
-
-        if (found == false) {
+        else {
                 as_region region = find_region(as, full_faultaddress);
                 if (!region) {
                         return EFAULT;
@@ -192,6 +231,7 @@ vm_fault(int faulttype, vaddr_t faultaddress)
                 }
 
                 lock_acquire(page_table_lock);
+                uint32_t hash = hpt_hash(as, faultaddress);
                 new->next = page_table[hash];
                 page_table[hash] = new;
                 lock_release(page_table_lock);
