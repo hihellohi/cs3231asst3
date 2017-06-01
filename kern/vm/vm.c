@@ -108,7 +108,7 @@ int vm_copy(struct addrspace *old, struct addrspace *newas)
                                         return ENOMEM;
                                 }
 
-                                //TODO increase reference count
+                                increment_ref_count(cur->elo & PAGE_FRAME);
                                 
                                 cur->elo &= ~TLBLO_DIRTY;
                                 new->elo = cur->elo;
@@ -127,27 +127,20 @@ int vm_copy(struct addrspace *old, struct addrspace *newas)
         return 0;
 }
 
-static int onReadonlyFault(vaddr_t full_faultaddress) {
+static int on_readonly_fault(vaddr_t full_faultaddress) {
         struct addrspace *as = proc_getas();
 
         if(find_region(as, full_faultaddress)->writeable) {
                 vaddr_t faultaddress = full_faultaddress & PAGE_FRAME;
 
-                vaddr_t newframe = KVADDR_TO_PADDR(alloc_kpages(1));
-                if(!newframe){
-                        return ENOMEM;
-                }
-
                 struct page_table_entry *entry = page_table_seek(as, faultaddress);
-                memcpy((void*)PADDR_TO_KVADDR(newframe),
-                                (void*)PADDR_TO_KVADDR(entry->elo & PAGE_FRAME), 
-                                PAGE_SIZE);
-                uint32_t elo = entry->elo = newframe | TLBLO_DIRTY | TLBLO_VALID;
-                //TODO decrement reference count
+                vaddr_t new = cow(PADDR_TO_KVADDR(entry->elo & PAGE_FRAME));
+                entry->elo = KVADDR_TO_PADDR(new) | TLBLO_DIRTY | TLBLO_VALID;
+                uint32_t elo = entry->elo;
                 
                 elo |= as->writeable_mask;
-                int spl = splhigh();
 
+                int spl = splhigh();
                 int index = tlb_probe(faultaddress, 0);
                 if(index == -1) {
                         //entry was overwritten
@@ -156,8 +149,8 @@ static int onReadonlyFault(vaddr_t full_faultaddress) {
                 else{
                         tlb_write(faultaddress, elo, index);
                 }
-
                 splx(spl);
+
                 return 0;
         }
         else{
@@ -173,7 +166,7 @@ vm_fault(int faulttype, vaddr_t faultaddress)
 
         switch (faulttype) {
                 case VM_FAULT_READONLY:
-                        return onReadonlyFault(full_faultaddress);
+                        return on_readonly_fault(full_faultaddress);
                 case VM_FAULT_READ:
                 case VM_FAULT_WRITE:
                         break;

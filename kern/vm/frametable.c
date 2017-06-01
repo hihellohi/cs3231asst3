@@ -54,6 +54,20 @@ void frametable_bootstrap(void) {
         frame_table[(location / PAGE_SIZE) - 1].next_free = NULL;
 }
 
+static vaddr_t _alloc_kpages()
+{
+        vaddr_t addr;
+        if (next_free == NULL) {
+                addr = 0;
+        }
+        else {
+                addr = PADDR_TO_KVADDR((next_free - frame_table) * PAGE_SIZE);
+                next_free->ref_count = 1;
+                next_free = next_free->next_free;
+        }
+        return addr;
+}
+
 /* Note that this function returns a VIRTUAL address, not a physical 
  * address
  * WARNING: this function gets called very early, before
@@ -64,39 +78,45 @@ void frametable_bootstrap(void) {
 
 vaddr_t alloc_kpages(unsigned int npages)
 {
-        paddr_t addr;
-
         if (frame_table == NULL) {
                 spinlock_acquire(&stealmem_lock);
-                addr = ram_stealmem(npages);
+                paddr_t paddr = ram_stealmem(npages);
                 spinlock_release(&stealmem_lock);
 
-                if(addr == 0)
+                if(paddr == 0)
                         return 0;
 
-                return PADDR_TO_KVADDR(addr);
+                return PADDR_TO_KVADDR(paddr);
         }
         else {
-                // TODO: this is for debugging only - remove later
-                KASSERT(npages == 1);
-
                 if (npages != 1) {
                         return 0;
                 }
 
                 spinlock_acquire(&stealmem_lock);
-                if (next_free == NULL) {
-                        addr = 0;
-                }
-                else {
-                        addr = PADDR_TO_KVADDR((next_free - frame_table) * PAGE_SIZE);
-                        next_free->ref_count = 1;
-                        next_free = next_free->next_free;
-                }
+                vaddr_t addr = _alloc_kpages();
                 spinlock_release(&stealmem_lock);
 
                 return addr;
         }
+}
+
+vaddr_t cow(vaddr_t addr)
+{
+        unsigned entry = KVADDR_TO_PADDR(addr) / PAGE_SIZE;
+        vaddr_t ret;
+
+        spinlock_acquire(&stealmem_lock);
+        if (frame_table[entry].ref_count == 1) {
+                ret = addr;
+        }
+        else {
+                frame_table[entry].ref_count -= 1;
+                ret = _alloc_kpages();
+                memcpy((void*) ret, (void*) addr, PAGE_SIZE);
+        }
+        spinlock_release(&stealmem_lock);
+        return ret;
 }
 
 void free_kpages(vaddr_t addr)
@@ -108,10 +128,22 @@ void free_kpages(vaddr_t addr)
         unsigned entry = paddr / PAGE_SIZE;
 
         spinlock_acquire(&stealmem_lock);
-        frame_table[entry].ref_count = 0;
-
-        frame_table[entry].next_free = next_free;
-        next_free = &frame_table[entry];
+        if (frame_table[entry].ref_count == 1) {
+                frame_table[entry].next_free = next_free;
+                next_free = &frame_table[entry];
+                frame_table[entry].ref_count = 0;
+        }
+        else {
+                frame_table[entry].ref_count -= 1;
+        }
         spinlock_release(&stealmem_lock);
 }
 
+void increment_ref_count(vaddr_t addr)
+{
+        paddr_t paddr = KVADDR_TO_PADDR(addr);
+        unsigned entry = paddr / PAGE_SIZE;
+        spinlock_acquire(&stealmem_lock);
+        frame_table[entry].ref_count += 1;
+        spinlock_release(&stealmem_lock);
+}
