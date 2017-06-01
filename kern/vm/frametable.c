@@ -139,10 +139,9 @@ void free_kpages(vaddr_t addr)
         spinlock_release(&stealmem_lock);
 }
 
-void increment_ref_count(vaddr_t addr)
+void increment_ref_count(paddr_t addr)
 {
-        paddr_t paddr = KVADDR_TO_PADDR(addr);
-        unsigned entry = paddr / PAGE_SIZE;
+        unsigned entry = addr / PAGE_SIZE;
         spinlock_acquire(&stealmem_lock);
         frame_table[entry].ref_count += 1;
         spinlock_release(&stealmem_lock);

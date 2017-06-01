@@ -68,7 +68,6 @@ void vm_destroy(struct addrspace *as)
 
                 while(cur){
                         if(cur->pid == (uint32_t) as){
-                                //TODO decrement
                                 if(!prev){
                                         page_table[i] = cur->next;
                                 }
