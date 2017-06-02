@@ -38,8 +38,8 @@ struct addrspace;
  * You'll probably want to add stuff here.
  */
 struct frame_table_entry {
-	int ref_count;
-	struct frame_table_entry *next_free;
+        int ref_count;
+        struct frame_table_entry *next_free;
 };
 
 struct page_table_entry {

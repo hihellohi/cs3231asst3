@@ -74,6 +74,8 @@ as_copy(struct addrspace *old, struct addrspace **ret)
                 return ENOMEM;
         }
 
+        newas->writeable_mask = old->writeable_mask;
+
         as_region *curold, *curnew;
         for(curold = &old->first_region, curnew = &newas->first_region; 
                         *curold;
