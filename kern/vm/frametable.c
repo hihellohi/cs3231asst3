@@ -77,9 +77,6 @@ vaddr_t alloc_kpages(unsigned int npages)
                 return PADDR_TO_KVADDR(addr);
         }
         else {
-                // TODO: this is for debugging only - remove later
-                KASSERT(npages == 1);
-
                 if (npages != 1) {
                         return 0;
                 }
