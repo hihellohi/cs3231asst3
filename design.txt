@@ -1,1 +1,95 @@
-Place your design document here.
+Frame table
+
+The frame table was implemented as a continuous array of struct
+frame_table_entry that is placed at the very top of ram, with one
+entry per frame. In vm_bootstrap, the frame table (and page table) are
+“allocated” memory, i.e., their pointers are assigned by calculating
+the appropriate offsets from the top of ram, and then the frames that
+were used so far (by the kernel’s bump allocator and by the frame/page
+tables themselves) are set in the frame_table array to “used”.
+
+To keep track of free/used frames, we used a struct frame_table_entry
+*next_free pointer that points to the next free frame. Each free entry
+in the frame table also has a next_free pointer that points to the next
+free frame, i.e., we maintain a linked list of all the free frames from
+inside free frame table entries, and a pointer to the first free frame.
+
+This allows constant time allocation of frames, as well as constant time
+freeing of frames as we can simply prepend the freed frame to the linked
+list of free frames.
+
+In alloc_kpages, to support allocating of memory before the vm
+is initialized, we check if the frame table is NULL, and if so,
+simply resort to the bump allocator ram_stealmem. The same is done in
+free_kpages, except if frame table is NULL we just do nothing, i.e.,
+throw away the memory.
+
+Access to the frame table is synchronised with a spinlock to avoid race
+conditions from multiple processes.
+
+Page table
+
+We used a hash table to represent our page table (as per the assignment
+specifications). The hashing function takes a pointer to an addresspace
+data structure (representing a process) and a faulting address as
+input. The size of the hashtable was 2 times the number of frames
+available to balance performance and memory usage. The page table
+was initialized in a similar manner to the frame table from within
+vm_bootstrap.
+
+Access to the page table is synchronised with a lock to avoid race
+conditions from multiple processes.
+
+The data structure we used to manage the address space was a linked list.
+This was primarily chosen due to its dynamic memory allocation allowing
+it to grow as more regions are added.  In addition, we can add new
+regions in constant time by prepending them to the list.  Unfortunately,
+this results in linear time lookups which can be improved on by using,
+for example, a balanced binary tree which runs in logarithmic time.
+However, the complexity of implementing such a data structure outweighed
+the possible performance improvements (especially since the number of
+regions is not expected to be very large) and we decided against this.
+
+Each region was represented by a base pointer and a size.  We also keep
+track of the write permissions to the region but we decided against
+storing read and execute permissions.  We made this decision as, in the
+context of this assignment, the latter two are only consequential when the
+region has none of the three permissions. In this case we were to simply
+return an EFAULT if we vm_fault in this region and this behaviour can
+be achieved by simply not adding this region to the addresspace at all.
+
+As_define_stack simply calls as_define_region with a size of 16 *
+PAGE_SIZE (as recommended) and a base pointer of USERSTACK - 16 *
+PAGE_SIZE. This will result in the stack being placed at the very top
+of user memory. It returns USERSTACK.
+
+as_copy makes a deep copy of the old addresspace (including duplicating
+the linked list) and then calls a function in vm.c that iterates over
+every page in the page table and duplicates it and the frame tied to it if
+it belongs to the old addresspace. It then adds the new entry to the page
+table under the hash of the new addresspace and the (shared) faultaddress.
+
+as_destroy frees all resources consumed by an addresspace, including
+the linked list that represents the defined regions. It also removes
+and frees the pages that belong to the addresspace from the page table
+and calls free_kpages on all of the frames tied to those pages.
+
+We implemented as_complete_load and as_prepare_load by keeping a mask on
+the addresspace data structure. Prepare load sets the mask to TLBLO_DIRTY
+and complete load sets the mask to 0. vm_fault simply bitwise ORs this
+mask with entrylo immediately before writing it to the TLB (meaning that
+the page table entry will have the correct, actual, permissions). Both
+as_complete_load and as_prepare_load call as_activate afterwards to
+flush the TLB so that we don’t use any stale entries.
+
+vm_fault
+
+vm_fault follows the flowchart given in one of the lectures. After
+checking that faulttype is valid (e.g., VM_FAULT_READONLY immediately
+returns EFAULT) we compute the hash from the current address space
+pointer and the fault address. We then look into the page table and
+check if the entry exists. If the entry is not present in the page table,
+we first check that the fault address occurs in a valid region, and if
+so, we call alloc_kpages(1) to allocate a new page, and also kmalloc a
+new page_table_entry and insert it into the page table. We then disable
+interrupts before doing a tlb_random.
