@@ -61,6 +61,7 @@ as_create(void)
         as->first_region = NULL;
         as->heap = NULL;
         as->writeable_mask = 0;
+        as->stack_pointer = 0;
 
         return as;
 }
@@ -75,6 +76,9 @@ as_copy(struct addrspace *old, struct addrspace **ret)
                 return ENOMEM;
         }
 
+        newas->writeable_mask = old->writeable_mask;
+        newas->stack_pointer = old->stack_pointer;
+
         as_region *curold, *curnew;
         for(curold = &old->first_region, curnew = &newas->first_region; 
                         *curold;
@@ -87,6 +91,9 @@ as_copy(struct addrspace *old, struct addrspace **ret)
                 }
 
                 **curnew = **curold;
+                if(*curold == old->heap){
+                        newas->heap = *curnew;
+                }
         }
 
         int err = vm_copy(old, newas);

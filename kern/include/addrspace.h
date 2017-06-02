@@ -55,7 +55,6 @@ struct _as_region {
         vaddr_t vbase;
 
         int writeable;
-
         as_region next;
 };
 
